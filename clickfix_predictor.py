@@ -1,12 +1,19 @@
 import os
+import re
 import cv2
 import time
 import pytesseract
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 import numpy as np
 import tensorflow as tf
 import psutil
+import logging
 from PIL import Image
 import tempfile
+
+# === Logging Setup ===
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # === Set CPU Affinity to 2 cores ===
 try:
@@ -31,12 +38,12 @@ labels = ['clickfix', 'legit']
 # === Keyword Definitions ===
 keyword_sequences = [['win + r'], ['windows + r'], ['+ r'], ['ctrl + v'], ['control + v'], ['enter']]
 suspicious_keywords = [
-    'win + r', 'windows + r', 'powershell', 'cmd',
+    'win + r','windows','win', 'windows + r', 'powershell', 'cmd',
     'control + v', 'ctrl + v', 'command prompt', 'paste the command',
     'run:', 'copy and paste', 'open powershell', 'execute'
 ]
 
-# === Image Preprocessing ===
+# === Image Preprocessing for Model ===
 def preprocess_image_for_model(image_path, target_size=(224, 224)):
     img = cv2.imread(image_path)
     if img is None:
@@ -48,15 +55,27 @@ def preprocess_image_for_model(image_path, target_size=(224, 224)):
 # === OCR Extraction from Original Image ===
 def extract_text(image_path):
     try:
-        image = Image.open(image_path).convert("RGB")  # Use original image
-        return pytesseract.image_to_string(image).lower()
-    except Exception:
+        image = Image.open(image_path).convert("RGB")
+        text = pytesseract.image_to_string(image).lower()
+        logger.info("[Extracted OCR Text]: %s", text)
+        return text
+    except Exception as e:
+        logger.error("[OCR Extraction Failed]: %s", e)
         return ""
 
-# === Keyword Check ===
+# === Normalize and Match Keywords ===
+def normalize_text(text):
+    # Standardize spacing around + and collapse multiple spaces
+    text = re.sub(r'\s*\+\s*', ' + ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 def check_keywords(text):
+    text = normalize_text(text)
+    logger.info("[Normalized OCR Text]: %s", text)
     found = [kw for kw in suspicious_keywords if kw in text]
     matched_sequence = any(all(word in text for word in seq) for seq in keyword_sequences)
+    logger.info("[Keywords Found]: %s | Matched Sequence: %s", found, matched_sequence)
     return bool(found or matched_sequence), found
 
 # === System & Process Telemetry ===
@@ -121,7 +140,6 @@ def classify_single_image(image_path):
         image = preprocess_image_for_model(image_path)
         prediction = model.predict(image)[0]
 
-        # Binary sigmoid or softmax
         if len(prediction) == 1:
             confidence = float(prediction[0])
             predicted_label = 'clickfix' if confidence > 0.5 else 'legit'
@@ -140,6 +158,7 @@ def classify_single_image(image_path):
             "confidence": round(confidence, 4),
             "keywords_matched": matched,
             "final_classification": final_label,
+            #"ocr_text": text  # Optional: return raw OCR text
         }
 
     prediction_result, cpu_used = get_cpu_percent_for_prediction(prediction_block)
@@ -152,7 +171,6 @@ def classify_single_image(image_path):
 
 # === Flask-compatible Wrapper ===
 def analyze_image(image_file):
-    """Flask-compatible function to handle image upload and classify it."""
     with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as tmp:
         image_file.save(tmp.name)
         return classify_single_image(tmp.name)
