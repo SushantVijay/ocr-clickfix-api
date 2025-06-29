@@ -45,16 +45,10 @@ def preprocess_image_for_model(image_path, target_size=(224, 224)):
     img = img.astype("float32") / 255.0
     return np.expand_dims(img, axis=0)
 
-def preprocess_image_for_ocr(image_path):
-    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-    image = cv2.resize(image, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
-    _, image = cv2.threshold(image, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return Image.fromarray(image)
-
-# === OCR Extraction ===
+# === OCR Extraction from Original Image ===
 def extract_text(image_path):
     try:
-        image = preprocess_image_for_ocr(image_path)
+        image = Image.open(image_path).convert("RGB")  # Use original image
         return pytesseract.image_to_string(image).lower()
     except Exception:
         return ""
