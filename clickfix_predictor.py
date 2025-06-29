@@ -15,7 +15,7 @@ try:
 except AttributeError:
     pass  # Not supported on all OS
 
-# === GPU Setup: Force CPU Only ===
+# === Force CPU Only ===
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 physical_devices = tf.config.list_physical_devices('GPU')
 if physical_devices:
@@ -99,25 +99,35 @@ def get_usage_stats():
         "load_average_1m": round(load_avg_1m, 2) if isinstance(load_avg_1m, (float, int)) else load_avg_1m
     }
 
-# === Accurate CPU Percent With Fallback ===
+# === Accurate CPU Percent Using Time ===
 def get_cpu_percent_for_prediction(fn, *args, **kwargs):
     process = psutil.Process(os.getpid())
-    process.cpu_percent(interval=None)
+    cpu_times_before = process.cpu_times()
     start_time = time.time()
-    result = fn(*args, **kwargs)
-    elapsed = time.time() - start_time
-    process_cpu = process.cpu_percent(interval=elapsed)
-    return result, round(process_cpu if process_cpu > 0 else psutil.cpu_percent(interval=0.2), 2)
 
-# === Single Image Classification ===
+    result = fn(*args, **kwargs)
+
+    elapsed = time.time() - start_time
+    cpu_times_after = process.cpu_times()
+
+    # Total CPU time = user + system
+    cpu_time_used = (
+        (cpu_times_after.user - cpu_times_before.user) +
+        (cpu_times_after.system - cpu_times_before.system)
+    )
+
+    cpu_percent = (cpu_time_used / elapsed) * 100 if elapsed > 0 else 0.0
+    return result, round(cpu_percent, 2)
+
+# === Main Classification Logic ===
 def classify_single_image(image_path):
     start_time = time.time()
 
     def prediction_block():
         image = preprocess_image_for_model(image_path)
         prediction = model.predict(image)[0]
-        
-        # Support both sigmoid and softmax models
+
+        # Binary sigmoid or softmax
         if len(prediction) == 1:
             confidence = float(prediction[0])
             predicted_label = 'clickfix' if confidence > 0.5 else 'legit'
@@ -139,6 +149,7 @@ def classify_single_image(image_path):
         }
 
     prediction_result, cpu_used = get_cpu_percent_for_prediction(prediction_block)
+
     stats = get_usage_stats()
     stats.update(prediction_result)
     stats["cpu_percent"] = cpu_used
