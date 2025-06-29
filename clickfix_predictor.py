@@ -5,33 +5,27 @@ import pytesseract
 import numpy as np
 import tensorflow as tf
 import psutil
-import re
-import difflib
 from PIL import Image
+import tempfile
 
-# === CPU Affinity ===
+# === Set CPU Affinity to 2 cores ===
 try:
     process = psutil.Process(os.getpid())
     process.cpu_affinity([0, 1])
-    print("✅ CPU affinity set to cores: [0, 1]")
 except AttributeError:
-    print("⚠️ CPU affinity not supported on this OS")
+    pass  # Not supported on all OS
 
-# === GPU Setup ===
+# === Force CPU Only ===
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 physical_devices = tf.config.list_physical_devices('GPU')
 if physical_devices:
-    try:
-        for device in physical_devices:
-            tf.config.experimental.set_memory_growth(device, True)
-        print(f"✅ GPU available: using {len(physical_devices)} GPU(s)")
-    except:
-        print("⚠️ Could not enable GPU memory growth.")
-else:
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    print("💡 No GPU found. Using CPU only.")
+    for device in physical_devices:
+        tf.config.experimental.set_memory_growth(device, True)
 
 # === Load Model ===
-model = tf.keras.models.load_model("clickfix_mobilenetv1.keras")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "clickfix_mobilenetv1.keras")
+model = tf.keras.models.load_model(MODEL_PATH)
+
 labels = ['clickfix', 'legit']
 
 # === Keyword Definitions ===
@@ -42,7 +36,7 @@ suspicious_keywords = [
     'run:', 'copy and paste', 'open powershell', 'execute'
 ]
 
-# === Image Preprocessing for Model ===
+# === Image Preprocessing ===
 def preprocess_image_for_model(image_path, target_size=(224, 224)):
     img = cv2.imread(image_path)
     if img is None:
@@ -51,53 +45,27 @@ def preprocess_image_for_model(image_path, target_size=(224, 224)):
     img = img.astype("float32") / 255.0
     return np.expand_dims(img, axis=0)
 
-# === OCR Preprocessing ===
 def preprocess_image_for_ocr(image_path):
     image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-    image = cv2.resize(image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    image = cv2.GaussianBlur(image, (3, 3), 0)
-    image = cv2.adaptiveThreshold(image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                  cv2.THRESH_BINARY, 31, 2)
+    image = cv2.resize(image, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
+    _, image = cv2.threshold(image, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return Image.fromarray(image)
 
-# === Extract Text ===
+# === OCR Extraction ===
 def extract_text(image_path):
     try:
         image = preprocess_image_for_ocr(image_path)
-        config = "--psm 6 --oem 3"
-        text = pytesseract.image_to_string(image, config=config).lower()
-        text = re.sub(r"\s+", " ", text)
-        print(f"\n[OCR DEBUG] Extracted Text from {os.path.basename(image_path)}:\n{text}\n")
-        return text
-    except Exception as e:
-        print(f"OCR error on {image_path}: {e}")
+        return pytesseract.image_to_string(image).lower()
+    except Exception:
         return ""
 
-# === Normalize and Match Keywords ===
-def normalize_text(text):
-    text = re.sub(r"[^a-z0-9 +]", "", text.lower())
-    text = re.sub(r"\s+", " ", text)
-    return text
-
+# === Keyword Check ===
 def check_keywords(text):
-    text = normalize_text(text)
-    found = []
-
-    for kw in suspicious_keywords:
-        if kw in text:
-            found.append(kw)
-        else:
-            # Fuzzy match in case of OCR errors
-            matches = difflib.get_close_matches(kw, [text], n=1, cutoff=0.7)
-            if matches:
-                found.append(kw)
-
-    matched_sequence = any(all(kw in text for kw in seq) for seq in keyword_sequences)
-
-    print(f"[Keyword DEBUG] Matched keywords: {found}")
+    found = [kw for kw in suspicious_keywords if kw in text]
+    matched_sequence = any(all(word in text for word in seq) for seq in keyword_sequences)
     return bool(found or matched_sequence), found
 
-# === System Telemetry ===
+# === System & Process Telemetry ===
 def get_usage_stats():
     proc = psutil.Process(os.getpid())
     ram_mb = proc.memory_info().rss / (1024 * 1024)
@@ -131,32 +99,42 @@ def get_usage_stats():
         "load_average_1m": round(load_avg_1m, 2) if isinstance(load_avg_1m, (float, int)) else load_avg_1m
     }
 
-# === CPU Usage Tracking Wrapper ===
+# === Accurate CPU Percent Using Time ===
 def get_cpu_percent_for_prediction(fn, *args, **kwargs):
     process = psutil.Process(os.getpid())
-    process.cpu_percent(interval=None)
-    system_cpu_percent_before = psutil.cpu_percent(interval=None)
-
+    cpu_times_before = process.cpu_times()
     start_time = time.time()
+
     result = fn(*args, **kwargs)
+
     elapsed = time.time() - start_time
+    cpu_times_after = process.cpu_times()
 
-    process_cpu = process.cpu_percent(interval=elapsed)
-    system_cpu_after = psutil.cpu_percent(interval=0.2)
+    # Total CPU time = user + system
+    cpu_time_used = (
+        (cpu_times_after.user - cpu_times_before.user) +
+        (cpu_times_after.system - cpu_times_before.system)
+    )
 
-    cpu_final = process_cpu if process_cpu > 0 else system_cpu_after
-    return result, round(cpu_final, 2)
+    cpu_percent = (cpu_time_used / elapsed) * 100 if elapsed > 0 else 0.0
+    return result, round(cpu_percent, 2)
 
-# === Main Classifier ===
+# === Main Classification Logic ===
 def classify_single_image(image_path):
     start_time = time.time()
 
     def prediction_block():
         image = preprocess_image_for_model(image_path)
         prediction = model.predict(image)[0]
-        pred_idx = np.argmax(prediction)
-        confidence = float(prediction[pred_idx])
-        predicted_label = labels[pred_idx]
+
+        # Binary sigmoid or softmax
+        if len(prediction) == 1:
+            confidence = float(prediction[0])
+            predicted_label = 'clickfix' if confidence > 0.5 else 'legit'
+        else:
+            pred_idx = np.argmax(prediction)
+            confidence = float(prediction[pred_idx])
+            predicted_label = labels[pred_idx]
 
         text = extract_text(image_path)
         keyword_hit, matched = check_keywords(text)
@@ -176,14 +154,19 @@ def classify_single_image(image_path):
     stats.update(prediction_result)
     stats["cpu_percent"] = cpu_used
     stats["time_taken_sec"] = round(time.time() - start_time, 3)
-
     return stats
 
-# === System-Wide Telemetry ===
+# === Flask-compatible Wrapper ===
+def analyze_image(image_file):
+    """Flask-compatible function to handle image upload and classify it."""
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as tmp:
+        image_file.save(tmp.name)
+        return classify_single_image(tmp.name)
+
+# === System-Wide Metrics Endpoint ===
 def get_system_metrics():
     virtual_mem = psutil.virtual_memory()
     boot_time = time.time() - psutil.boot_time()
-
     return {
         "system": {
             "uptime_seconds": round(boot_time),
