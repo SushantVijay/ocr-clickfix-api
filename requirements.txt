@@ -1,7 +1,7 @@
-Flask==3.0.2
-opencv-python
-numpy
+Flask
 tensorflow
+opencv-python-headless
 pytesseract
-pillow
+Pillow
 psutil
+gunicorn
