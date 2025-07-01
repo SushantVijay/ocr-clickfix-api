@@ -4,7 +4,7 @@ A lightweight and optimized Flask API for detecting fake CAPTCHA-based phishing 
 # 🚀Features
 ✅ Image classification using a trained MobileNetV1 .keras model
 
-🔍 OCR-based keyword matching for phishing patterns (e.g., win + r, powershell)
+🔍 OCR-based keyword matching for phishing patterns (e.g., win + r, powershell, ctrl + V, open run)
 
 📊 System telemetry: RAM, CPU usage, threads, and core info
 
