@@ -132,7 +132,7 @@ def get_cpu_percent_for_prediction(fn, *args, **kwargs):
 
 # === Logging Block ===
 def log_prediction_details(image_name, model_pred, confidence, final_label, keywords, cpu, duration):
-    logger.info("\n" + "="*60)
+    logger.info("\n" + "="*75)
     logger.info("📥 [Request] Image Received: %s", image_name)
     logger.info("🔍 [Model Prediction]: %s (Confidence: %.4f)", model_pred, confidence)
     logger.info("🔑 [OCR Keywords Matched]: %s", keywords if keywords else "None")
