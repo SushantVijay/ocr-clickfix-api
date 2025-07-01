@@ -38,7 +38,7 @@ labels = ['clickfix', 'legit']
 # === Keyword Definitions ===
 keyword_sequences = [['win + r'], ['windows + r'], ['+ r'], ['ctrl + v'], ['control + v'], ['enter']]
 suspicious_keywords = [
-    'win + r', 'windows', 'win', ' + r', 'windows + r', 'powershell', 'cmd',
+    'win + r', 'enter',' + r', 'windows + r', 'powershell', 'cmd',
     'control + v', 'ctrl + v', 'command prompt', 'paste the command',
     'run:', 'copy and paste', 'open powershell', 'execute'
 ]
