@@ -2,7 +2,7 @@ name: CI/CD Deploy to Azure VM
 
 on:
   push:
-    branches: [ main ]  # Adjust if your default branch is different
+    branches: [ master ]  # Adjust if your default branch is different
 
 jobs:
   deploy:
