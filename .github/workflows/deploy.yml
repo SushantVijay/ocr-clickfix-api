@@ -1,48 +1,42 @@
-name: CI/CD Deploy to Azure VM
+name: Deploy ClickFix API
 
 on:
   push:
-    branches: [ master ]  # Adjust if your default branch is different changed to master
+    branches: [main]
 
 jobs:
   deploy:
-    name: Deploy to Azure VM
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout Repo
+      uses: actions/checkout@v3
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.5.4
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Rsync project to Azure VM
-        run: |
-          rsync -avz --delete --exclude='.git*' ./ ${{ secrets.USERNAME }}@${{ secrets.HOST }}:/home/${{ secrets.USERNAME }}/ocr-clickfix-api
+    - name: Copy files to VM
+      run: |
+        rsync -avz --delete --exclude='.git*' ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/${{ secrets.SSH_USER }}/ocr-clickfix-api
 
-      - name: Setup venv, install dependencies, restart service
-        run: |
-          ssh ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
-            cd /home/${{ secrets.USERNAME }}/ocr-clickfix-api
+    - name: Deploy on VM
+      run: |
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          cd /home/${{ secrets.SSH_USER }}/ocr-clickfix-api
 
-            # Remove old venv if it exists
-            if [ -d "venv" ]; then
-              rm -rf venv
-            fi
-
-            # Create and activate new virtualenv
+          # Setup venv if not exists
+          if [ ! -d "venv" ]; then
             python3 -m venv venv
-            source venv/bin/activate
+          fi
 
-            # Upgrade pip and install requirements
-            # pip install --upgrade pip
-            pip install -r requirements.txt
+          source venv/bin/activate
 
-            # Restart Gunicorn
-            sudo systemctl restart ${{ secrets.SERVICE_NAME }}
-            sudo systemctl status ${{ secrets.SERVICE_NAME }} --no-pager
-          EOF
+          # Always reinstall in case of updates
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+          # Restart service
+          sudo systemctl restart clickfix
+EOF
