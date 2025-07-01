@@ -135,7 +135,7 @@ def log_prediction_details(image_name, model_pred, confidence, final_label, keyw
     logger.info("\n" + "="*93)
     logger.info("📥 [Request] Image Received: %s", image_name)
     logger.info("🔍 [Model Prediction]: %s (Confidence: %.4f)", model_pred, confidence)
-    logger.info("🔍 [Final Prediction]: ", final_label)
+    logger.info("🔍 [Final Prediction]: %s", final_label)
     logger.info("🔑 [OCR Keywords Matched]: %s", keywords if keywords else "None")
     logger.info("✅ [Final Classification]: %s", final_label)
     logger.info("🧠 [CPU Usage During Prediction]: %.2f%%", cpu)
