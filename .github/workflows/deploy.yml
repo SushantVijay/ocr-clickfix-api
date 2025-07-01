@@ -16,16 +16,16 @@ jobs:
 
     - name: 🧩 Install SSH Key
       run: |
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
+        echo "${{ secrets.SSH_KEY }}" > key.pem
         chmod 600 key.pem
 
     - name: 📡 Deploy Code via rsync
       run: |
-        rsync -avz --delete --exclude '.git*' -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./ ${{ secrets.SSH_USERNAME }}@${{ secrets.VM_IP }}:/home/${{ secrets.SSH_USERNAME }}/ocr-clickfix-api
+        rsync -avz --delete --exclude '.git*' -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./ ${{ secrets.USERNAME }}@${{ secrets.HOST }}:/home/${{ secrets.USERNAME }}/ocr-clickfix-api
 
     - name: 🔧 Set up Python & Restart Gunicorn
       run: |
-        ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.SSH_USERNAME }}@${{ secrets.VM_IP }} << 'EOF'
+        ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
         set -e
         cd ~/ocr-clickfix-api
         python3 -m venv venv
