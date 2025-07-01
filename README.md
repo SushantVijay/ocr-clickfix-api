@@ -1,5 +1,5 @@
 # 📦ClickFix Detector API
-A lightweight and optimized Flask API for detecting fake CAPTCHA-based phishing pages (ClickFix) using image classification and OCR keyword analysis. Designed to work efficiently even on systems with 2 vCPUs and 4 GB RAM.
+A lightweight and optimized Flask API for detecting fake CAPTCHA-based phishing pages (ClickFix) using image classification and OCR keyword analysis. Designed to work efficiently even on systems with 2 vCPUs and 4GB RAM.
 
 # 🚀Features
 ✅ Image classification using a trained MobileNetV1 .keras model
