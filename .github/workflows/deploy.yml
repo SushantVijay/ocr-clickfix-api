@@ -26,10 +26,8 @@ jobs:
     - name: 🔧 Set up Python & Restart Gunicorn
       run: |
         ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
-        set -e
+        
         cd ~/ocr-clickfix-api
-        python3 -m venv venv
-        source venv/bin/activate
-        pip install -r requirements.txt
+        
         sudo systemctl restart clickfix
         EOF
