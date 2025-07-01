@@ -3,7 +3,7 @@ name: 🚀 Deploy to Azure VM
 on:
   push:
     branches:
-      - main  # or your deployment branch
+      - master  # or your deployment branch
 
 jobs:
   deploy:
