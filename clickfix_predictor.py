@@ -12,7 +12,7 @@ from PIL import Image
 import tempfile
 
 # === Logging Setup ===
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 # === Set CPU Affinity to 2 cores ===
@@ -38,7 +38,7 @@ labels = ['clickfix', 'legit']
 # === Keyword Definitions ===
 keyword_sequences = [['win + r'], ['windows + r'], ['+ r'], ['ctrl + v'], ['control + v'], ['enter']]
 suspicious_keywords = [
-    'win + r','windows','win', 'windows + r', 'powershell', 'cmd',
+    'win + r', 'windows', 'win', ' + r', 'windows + r', 'powershell', 'cmd',
     'control + v', 'ctrl + v', 'command prompt', 'paste the command',
     'run:', 'copy and paste', 'open powershell', 'execute'
 ]
@@ -65,7 +65,6 @@ def extract_text(image_path):
 
 # === Normalize and Match Keywords ===
 def normalize_text(text):
-    # Standardize spacing around + and collapse multiple spaces
     text = re.sub(r'\s*\+\s*', ' + ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
@@ -123,7 +122,6 @@ def get_cpu_percent_for_prediction(fn, *args, **kwargs):
     elapsed = time.time() - start_time
     cpu_times_after = process.cpu_times()
 
-    # Total CPU time = user + system
     cpu_time_used = (
         (cpu_times_after.user - cpu_times_before.user) +
         (cpu_times_after.system - cpu_times_before.system)
@@ -131,6 +129,17 @@ def get_cpu_percent_for_prediction(fn, *args, **kwargs):
 
     cpu_percent = (cpu_time_used / elapsed) * 100 if elapsed > 0 else 0.0
     return result, round(cpu_percent, 2)
+
+# === Logging Block ===
+def log_prediction_details(image_name, model_pred, confidence, final_label, keywords, cpu, duration):
+    logger.info("\n" + "="*60)
+    logger.info("📥 [Request] Image Received: %s", image_name)
+    logger.info("🔍 [Model Prediction]: %s (Confidence: %.4f)", model_pred, confidence)
+    logger.info("🔑 [OCR Keywords Matched]: %s", keywords if keywords else "None")
+    logger.info("✅ [Final Classification]: %s", final_label)
+    logger.info("🧠 [CPU Usage During Prediction]: %.2f%%", cpu)
+    logger.info("⏱️ [Total Time Taken]: %.3f sec", duration)
+    logger.info("="*60 + "\n")
 
 # === Main Classification Logic ===
 def classify_single_image(image_path):
@@ -149,28 +158,40 @@ def classify_single_image(image_path):
             predicted_label = labels[pred_idx]
 
         text = extract_text(image_path)
-        keyword_hit, matched = check_keywords(text)
+        keyword_hit, matched_keywords = check_keywords(text)
         final_label = "clickfix" if keyword_hit else predicted_label
 
         return {
             "image": os.path.basename(image_path),
             "model_prediction": predicted_label,
             "confidence": round(confidence, 4),
-            "keywords_matched": matched,
-            "final_classification": final_label,
-            #"ocr_text": text  # Optional: return raw OCR text
+            "keywords_matched": matched_keywords,
+            "final_classification": final_label
         }
 
     prediction_result, cpu_used = get_cpu_percent_for_prediction(prediction_block)
+    time_taken = round(time.time() - start_time, 3)
 
     stats = get_usage_stats()
     stats.update(prediction_result)
     stats["cpu_percent"] = cpu_used
-    stats["time_taken_sec"] = round(time.time() - start_time, 3)
+    stats["time_taken_sec"] = time_taken
+
+    log_prediction_details(
+        image_name=prediction_result["image"],
+        model_pred=prediction_result["model_prediction"],
+        confidence=prediction_result["confidence"],
+        final_label=prediction_result["final_classification"],
+        keywords=prediction_result["keywords_matched"],
+        cpu=cpu_used,
+        duration=time_taken
+    )
+
     return stats
 
 # === Flask-compatible Wrapper ===
 def analyze_image(image_file):
+    logger.info("📡 [Incoming Request] Processing image file: %s", image_file.filename)
     with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as tmp:
         image_file.save(tmp.name)
         return classify_single_image(tmp.name)
