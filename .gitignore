@@ -1,6 +1,50 @@
-venv/
+# Python
 __pycache__/
-*.pyc
-*.keras
-test/
-Procfile
+*.py[cod]
+*.pyo
+*.pyd
+*.env
+*.venv
+venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs and local debug files
+*.log
+*.sqlite3
+
+# OS and IDE junk
+.DS_Store
+*.swp
+*.bak
+*.tmp
+Thumbs.db
+
+# VSCode / PyCharm
+.vscode/
+.idea/
+
+# Gunicorn/PID/socket files (optional)
+*.pid
+*.sock
+
+# SSH Keys (should never be in repo)
+*.pem
+*.pub
+
+# Secrets
+.env
