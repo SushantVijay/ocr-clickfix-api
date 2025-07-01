@@ -159,7 +159,13 @@ def classify_single_image(image_path):
 
         text = extract_text(image_path)
         keyword_hit, matched_keywords = check_keywords(text)
-        final_label = "clickfix" if keyword_hit else predicted_label
+        # final_label = "clickfix" if keyword_hit else predicted_label
+        if keyword_hit:
+            final_label = "clickfix"
+        elif predicted_label == "clickfix" and not keyword_hit:
+            final_label = "legit"  # Prevent model false positive if OCR doesn't match
+        else:
+            final_label = predicted_label
 
         return {
             "image": os.path.basename(image_path),
