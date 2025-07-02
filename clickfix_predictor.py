@@ -160,18 +160,30 @@ def classify_single_image(image_path):
 
         text = extract_text(image_path)
         keyword_hit, matched_keywords = check_keywords(text)
-        # final_label = "clickfix" if keyword_hit else predicted_label
+
+        # --- Assisted Decision Logic ---
+        adjusted_confidence = confidence
+        final_label = predicted_label
+
         if keyword_hit:
-            final_label = "clickfix"
-        elif predicted_label == "clickfix" and not keyword_hit:
-            final_label = "legit"  # Prevent model false positive if OCR doesn't match
-        else:
-            final_label = predicted_label
+        # If the model was borderline and keywords are suspicious, nudge toward 'clickfix'
+            if predicted_label == "legit" and confidence > 0.4 and confidence < 0.6:
+                final_label = "clickfix"
+                adjusted_confidence = min(confidence + 0.2, 1.0)
+                logger.info("🧠 [Assisted Decision]: Model unsure, keywords matched → tipping to 'clickfix'")
+            elif predicted_label == "clickfix":
+                adjusted_confidence = min(confidence + 0.1, 1.0)  # reinforce
+            else:
+        # No keywords matched: downgrade weak 'clickfix' predictions
+                if predicted_label == "clickfix" and confidence < 0.6:
+                    final_label = "legit"
+                    adjusted_confidence = confidence
+                    logger.info("🤔 [Assisted Decision]: No keywords found, low confidence → downgrading to 'legit'")
 
         return {
             "image": os.path.basename(image_path),
             "model_prediction": predicted_label,
-            "confidence": round(confidence, 4),
+            "confidence": round(adjusted_confidence, 4),
             "keywords_matched": matched_keywords,
             "final_classification": final_label
         }
